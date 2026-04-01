@@ -28,8 +28,12 @@ import org.jkiss.dbeaver.model.impl.jdbc.JDBCDataSource;
 import org.jkiss.dbeaver.model.struct.rdb.DBSProcedure;
 
 import java.util.Arrays;
+import java.util.regex.Pattern;
 
 public class FireBirdSQLDialect extends GenericSQLDialect {
+
+    private static final Pattern EXECUTE_BLOCK_WITH_PARAMS =
+        Pattern.compile("^\\s*EXECUTE\\s+BLOCK\\s*\\(", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     private boolean supportsAsBeforeTableAlias = true;
 
@@ -148,5 +152,10 @@ public class FireBirdSQLDialect extends GenericSQLDialect {
     @Override
     public DBDBinaryFormatter getNativeBinaryFormatter() {
         return BinaryFormatterHexString.INSTANCE;
+    }
+
+    @Override
+    public boolean needsNativeParameterBinding(@NotNull String queryText) {
+        return EXECUTE_BLOCK_WITH_PARAMS.matcher(queryText).find();
     }
 }
