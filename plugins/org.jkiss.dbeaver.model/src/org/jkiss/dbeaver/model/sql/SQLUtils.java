@@ -1141,6 +1141,33 @@ public final class SQLUtils {
     }
 
     public static void fillQueryParameters(SQLQuery sqlStatement, List<SQLQueryParameter> parameters) {
+        // If the query requires native (PreparedStatement) binding, do not do text substitution.
+        // The caller is responsible for using a PreparedStatement and calling setXxx().
+        if (sqlStatement.isNativeParameterBinding()) {
+            // Named parameters (e.g. ':x') must be replaced with positional '?'
+            // placeholders so the JDBC PreparedStatement can bind them by index.
+            if (parameters != null && !parameters.isEmpty()) {
+                String query = sqlStatement.getText();
+                boolean needsRewrite = false;
+                for (SQLQueryParameter p : parameters) {
+                    if (!"?".equals(p.getOriginalName())) {
+                        needsRewrite = true;
+                        break;
+                    }
+                }
+                if (needsRewrite) {
+                    for (int i = parameters.size(); i > 0; i--) {
+                        SQLQueryParameter parameter = parameters.get(i - 1);
+                        if (!"?".equals(parameter.getOriginalName())) {
+                            query = query.substring(0, parameter.getTokenOffset()) + "?"
+                                + query.substring(parameter.getTokenOffset() + parameter.getTokenLength());
+                        }
+                    }
+                    sqlStatement.setText(query);
+                }
+            }
+            return;
+        }
         // Set values for all parameters
         // Replace parameter tokens with parameter values
         String query = sqlStatement.getText();

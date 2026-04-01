@@ -51,11 +51,15 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.*;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * SQL parser
  */
 public class SQLScriptParser {
+    private static final Pattern EXECUTE_BLOCK_PREFIX_PATTERN =
+        Pattern.compile("^\\s*EXECUTE\\s+BLOCK\\s*\\(",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     static protected final Log log = Log.getLog(SQLScriptParser.class);
 
@@ -834,6 +838,27 @@ public class SQLScriptParser {
         boolean execQuery = false;
         boolean ddlQuery = false;
         boolean insideDollarQuote = false;
+        boolean needsNativeBinding = false;
+        try {
+            String queryText = document.get(queryOffset, queryLength);
+            needsNativeBinding = sqlDialect.needsNativeParameterBinding(queryText);
+            if (!needsNativeBinding && queryText.indexOf(syntaxManager.getAnonymousParameterMark()) >= 0) {
+                needsNativeBinding = EXECUTE_BLOCK_PREFIX_PATTERN.matcher(queryText).find();
+            }
+        } catch (BadLocationException e) {
+            log.warn(e);
+        }
+
+        // When native parameter binding is required (e.g. Firebird EXECUTE BLOCK),
+        // detect anonymous '?' parameters by scanning tokens directly, regardless of
+        // whether anonymous parameters are enabled in user preferences.
+        if (needsNativeBinding) {
+            List<SQLQueryParameter> nativeParams = parseNativeBindingParameters(context, queryOffset, queryLength, syntaxManager);
+            if (nativeParams != null) {
+                return nativeParams;
+            }
+        }
+
         List<SQLQueryParameter> parameters = null;
         TPRuleBasedScanner ruleScanner = context.getScanner();
         ruleScanner.setRange(document, queryOffset, queryLength);
@@ -971,6 +996,104 @@ public class SQLScriptParser {
             }
         }
 
+        return parameters;
+    }
+
+    /**
+     * Scan for anonymous '?' parameter markers regardless of user preferences.
+     * Used when the dialect requires native JDBC parameter binding (e.g., Firebird EXECUTE BLOCK).
+     * Scans tokens and treats T_PARAMETER or raw '?' (outside strings/comments) as parameters.
+     */
+    private static List<SQLQueryParameter> parseNativeBindingParameters(
+        SQLParserContext context,
+        int queryOffset,
+        int queryLength,
+        SQLSyntaxManager syntaxManager
+    ) {
+        IDocument document = context.getDocument();
+        TPRuleBasedScanner ruleScanner = context.getScanner();
+        ruleScanner.setRange(document, queryOffset, queryLength);
+        char anonymousMark = syntaxManager.getAnonymousParameterMark();
+        List<SQLQueryParameter> parameters = null;
+
+        for (; ; ) {
+            TPToken token = ruleScanner.nextToken();
+            int tokenOffset = ruleScanner.getTokenOffset();
+            int tokenLength = ruleScanner.getTokenLength();
+            if (token.isEOF() || tokenOffset > queryOffset + queryLength) {
+                break;
+            }
+            SQLTokenType tokenType = token instanceof TPTokenDefault
+                ? (SQLTokenType) ((TPTokenDefault) token).getData()
+                : null;
+            // Check for tokens already classified as parameters
+            boolean isParam = tokenType == SQLTokenType.T_PARAMETER;
+            // Also check for '?' markers that weren't classified as T_PARAMETER
+            // (e.g. because anonymous parameters are disabled in preferences).
+            // The scanner may return '?' bundled with punctuation, so inspect the
+            // token text instead of assuming a standalone one-character token.
+            if (!isParam &&
+                tokenLength > 0 &&
+                tokenType != SQLTokenType.T_STRING &&
+                tokenType != SQLTokenType.T_COMMENT &&
+                tokenType != SQLTokenType.T_QUOTED
+            ) {
+                try {
+                    String tokenText = document.get(tokenOffset, tokenLength);
+                    int anonymousParamOffset = tokenText.indexOf(anonymousMark);
+                    if (anonymousParamOffset >= 0) {
+                        if (parameters == null) {
+                            parameters = new ArrayList<>();
+                        }
+                        while (anonymousParamOffset >= 0) {
+                            SQLQueryParameter parameter = new SQLQueryParameter(
+                                syntaxManager,
+                                parameters.size(),
+                                String.valueOf(anonymousMark),
+                                String.valueOf(anonymousMark),
+                                tokenOffset + anonymousParamOffset - queryOffset,
+                                1
+                            );
+                            parameter.setPrevious(getPreviousParameter(parameters, parameter));
+                            parameters.add(parameter);
+                            anonymousParamOffset = tokenText.indexOf(anonymousMark, anonymousParamOffset + 1);
+                        }
+                        continue;
+                    }
+                } catch (BadLocationException e) {
+                    // ignore
+                }
+            }
+            if (isParam && tokenLength > 0) {
+                try {
+                    String paramName = document.get(tokenOffset, tokenLength);
+                    // Strip the named-parameter prefix (e.g. ':' in ':x') to
+                    // match the behaviour of the normal parameter-parsing path.
+                    String preparedParamName = paramName;
+                    if (paramName.length() > 1) {
+                        String paramMark = paramName.substring(0, 1);
+                        if (ArrayUtils.contains(syntaxManager.getNamedParameterPrefixes(), paramMark)) {
+                            preparedParamName = paramName.substring(1);
+                        }
+                    }
+                    if (parameters == null) {
+                        parameters = new ArrayList<>();
+                    }
+                    SQLQueryParameter parameter = new SQLQueryParameter(
+                        syntaxManager,
+                        parameters.size(),
+                        preparedParamName,
+                        paramName,
+                        tokenOffset - queryOffset,
+                        tokenLength
+                    );
+                    parameter.setPrevious(getPreviousParameter(parameters, parameter));
+                    parameters.add(parameter);
+                } catch (BadLocationException e) {
+                    log.warn("Can't extract query parameter", e);
+                }
+            }
+        }
         return parameters;
     }
 
