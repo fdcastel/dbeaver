@@ -34,11 +34,7 @@ import org.jkiss.dbeaver.model.struct.DBSDataContainer;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.utils.CommonUtils;
 
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -142,29 +138,11 @@ public class SQLQueryDataContainer implements DBSDataContainer, SQLQueryContaine
         try (final DBCStatement dbcStatement = DBUtils.makeStatement(
             source,
             session,
-            sqlQuery.isNativeParameterBinding() ? DBCStatementType.QUERY : DBCStatementType.SCRIPT,
+            DBCStatementType.SCRIPT,
             sqlQuery,
             firstRow,
             maxRows))
         {
-            // Bind parameters natively if required (e.g. Firebird EXECUTE BLOCK)
-            if (sqlQuery.isNativeParameterBinding() && dbcStatement instanceof PreparedStatement ps) {
-                List<SQLQueryParameter> params = sqlQuery.getParameters();
-                if (params != null) {
-                    try {
-                        for (int i = 0; i < params.size(); i++) {
-                            String val = params.get(i).getValue();
-                            if (val == null || SQLConstants.NULL_VALUE.equals(val)) {
-                                ps.setNull(i + 1, Types.NULL);
-                            } else {
-                                ps.setString(i + 1, val);
-                            }
-                        }
-                    } catch (SQLException e) {
-                        throw new DBException("Failed to bind native parameters", e);
-                    }
-                }
-            }
             DBExecUtils.setStatementFetchSize(dbcStatement, firstRow, maxRows, fetchSize);
 
             // Execute statement

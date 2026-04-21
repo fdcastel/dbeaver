@@ -345,15 +345,6 @@ public class SQLScriptContext implements DBCScriptContext {
             }
         }
 
-        // Check if dialect requires native parameter binding for this query
-        DBCExecutionContext execCtx = getExecutionContext();
-        if (execCtx != null) {
-            SQLDialect dialect = execCtx.getDataSource().getSQLDialect();
-            if (dialect.needsNativeParameterBinding(query.getText())) {
-                query.setNativeParameterBinding(true);
-            }
-        }
-
         SQLUtils.fillQueryParameters(query, parameters);
 
         return true;

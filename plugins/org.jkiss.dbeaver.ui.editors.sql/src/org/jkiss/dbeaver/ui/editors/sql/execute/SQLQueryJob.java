@@ -79,9 +79,6 @@ import org.jkiss.dbeaver.utils.RuntimeUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.lang.reflect.InvocationTargetException;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -698,34 +695,13 @@ public class SQLQueryJob extends DataSourceJob {
     private void executeStatement(@NotNull DBCSession session, SQLQuery sqlQuery, long startTime, SQLQueryResult curResult) throws DBException {
         AbstractExecutionSource source = new AbstractExecutionSource(dataContainer, session.getExecutionContext(), partSite.getPart(), sqlQuery);
         source.setScriptContext(scriptContext);
-        final DBCStatementType stmtType = sqlQuery.isNativeParameterBinding()
-            ? DBCStatementType.QUERY
-            : DBCStatementType.SCRIPT;
         final DBCStatement dbcStatement = DBUtils.makeStatement(
             source,
             session,
-            stmtType,
+            DBCStatementType.SCRIPT,
             sqlQuery,
             rsOffset,
             rsMaxRows);
-        // Bind parameters natively if required (e.g. Firebird EXECUTE BLOCK)
-        if (sqlQuery.isNativeParameterBinding() && dbcStatement instanceof PreparedStatement ps) {
-            List<SQLQueryParameter> params = sqlQuery.getParameters();
-            if (params != null) {
-                try {
-                    for (int i = 0; i < params.size(); i++) {
-                        String val = params.get(i).getValue();
-                        if (val == null || SQLConstants.NULL_VALUE.equals(val)) {
-                            ps.setNull(i + 1, Types.NULL);
-                        } else {
-                            ps.setString(i + 1, val);
-                        }
-                    }
-                } catch (SQLException e) {
-                    throw new DBException("Failed to bind native parameters", e);
-                }
-            }
-        }
         DBExecUtils.setStatementFetchSize(dbcStatement, rsOffset, rsMaxRows, fetchSize);
         curStatement = dbcStatement;
 

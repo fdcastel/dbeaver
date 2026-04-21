@@ -80,7 +80,6 @@ public class SQLQuery implements SQLScriptElement {
     private int resultsMaxRows = -1;
     @Nullable
     private List<SQLQueryParameter> parameters;
-    private boolean nativeParameterBinding = false;
 
     private Throwable parseError;
     private boolean parsed = false;
@@ -112,7 +111,6 @@ public class SQLQuery implements SQLScriptElement {
         }
         this.parameters = sourceQuery.parameters;
         this.data = sourceQuery.data;
-        this.nativeParameterBinding = sourceQuery.nativeParameterBinding;
     }
 
     public SQLQuery(@Nullable DBPDataSource dataSource, @NotNull String text, int offset, int length) {
@@ -447,14 +445,6 @@ public class SQLQuery implements SQLScriptElement {
 
     public void setParameters(@Nullable List<SQLQueryParameter> parameters) {
         this.parameters = parameters;
-    }
-
-    public boolean isNativeParameterBinding() {
-        return nativeParameterBinding;
-    }
-
-    public void setNativeParameterBinding(boolean nativeParameterBinding) {
-        this.nativeParameterBinding = nativeParameterBinding;
     }
 
     public void reset() {

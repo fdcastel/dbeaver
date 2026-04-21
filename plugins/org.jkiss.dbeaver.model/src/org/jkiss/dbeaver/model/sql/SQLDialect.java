@@ -544,19 +544,4 @@ public interface SQLDialect {
     default boolean supportsQualifiedColumnNames() {
         return true;
     }
-
-    /**
-     * Returns true when the query must be executed as a PreparedStatement with
-     * native JDBC parameter binding rather than DBeaver's text-substitution.
-     * <p>
-     * For example, Firebird's EXECUTE BLOCK with '?' params requires native binding
-     * because Firebird's DSQL only accepts '?' in the parameter-definition position;
-     * literal substitution causes a parse error.
-     *
-     * @param queryText the SQL query text
-     * @return true if native parameter binding is required
-     */
-    default boolean needsNativeParameterBinding(@NotNull String queryText) {
-        return false;
-    }
 }
