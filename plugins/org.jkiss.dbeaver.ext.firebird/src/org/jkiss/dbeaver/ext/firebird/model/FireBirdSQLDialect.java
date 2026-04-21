@@ -42,7 +42,7 @@ public class FireBirdSQLDialect extends GenericSQLDialect {
     };
 
     private static final String[] DDL_KEYWORDS = new String[]{
-        "CREATE", "ALTER", "DROP", "EXECUTE", "RECREATE", "COMMENT"
+        "CREATE", "ALTER", "DROP", "RECREATE", "COMMENT"
     };
 
     // Firebird-specific keywords not covered by JDBC metadata or the generic dialect.
